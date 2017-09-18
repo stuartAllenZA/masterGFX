@@ -1,0 +1,167 @@
+#pragma once
+#include "util.h"
+#include "tiny_gltf.h"
+#include "stb_image.h"
+#include "picojson.h"
+#include "Shader.hpp"
+#include "material.hpp"
+#include "animation.hpp"
+#include <map>
+#include <GL/glew.h>
+#include "../GraphicsEngine/glm/glm.hpp"
+#include "../GraphicsEngine/glm/common.hpp"
+#include "../GraphicsEngine/glm/gtc/matrix_transform.hpp"
+#include "../GraphicsEngine/glm/gtx/quaternion.hpp"
+#include "../GraphicsEngine/glm/gtc/matrix_transform.hpp"
+#include "../GraphicsEngine/glm/gtc/type_ptr.hpp"
+
+struct Joint
+{
+	int         id;
+	int         index;
+	std::string name;
+	glm::mat4   invMatrix;
+	std::vector<Joint *> children;
+};
+
+struct  KeyFrames
+{
+	std::vector<float>       timeStamps;
+	float       minTime = 0.0f;
+	float       maxTime;
+	size_t      count;
+	std::vector<glm::vec3>   translation;
+	std::vector<glm::quat>   rotation;
+};
+struct  JointAnimation
+{
+	int         jointId;
+	glm::mat4   trans;
+	glm::mat4   rot;
+	glm::mat4   matrix;
+	KeyFrames   translation;
+	KeyFrames   rotation;
+};
+
+class Model {
+	private:
+		GLuint				_VAO;
+		std::vector<GLuint>	_VBOs;
+		GLuint				_texture1;
+		GLuint				_texture2;
+		tinygltf::Model		_model;
+		Shader				_shader;
+		std::vector<int>    _nodes;
+		std::string         _path;
+		std::vector<GLfloat>  _joints;
+		std::vector<GLfloat>      _weights;
+		std::vector<Joint *>    _bones;
+		std::vector<Animation *>    _animations;
+		int                     _boneCount = 0;
+		std::vector<GLushort>   _indices;
+		std::vector<float>      _vertex;
+		std::vector<float>      _matIndexs;
+		std::vector<float>      _normals;
+		std::vector<float>      _uvs;
+		std::map<int, Material> _materials;
+		bool                    _loaded = false;
+		bool                    _hasJoint = false;
+		glm::mat4               _locMat;
+		GLushort                _indicesCount;
+		std::map<int, glm::mat4>   _animeMatrice;
+		float           _currentTimeStamp;
+		std::string     _animationName;
+		std::map<int, JointAnimation *>   _jointAnimations;
+
+	public:
+		Model();
+		Model(const char *modelFile);
+		~Model();
+		void	loadMeshData();
+		void	addTextures();
+		bool	loadFromFile(Shader &shader, const char *path);
+		bool	_processModel();
+		void	_processNode(int index);
+		void    _processModelMesh(tinygltf::Mesh& mesh, int node);
+		float           _currentTimeStamp;
+		std::string     _animationName;
+		std::map<int, JointAnimation *>   _jointAnimations;
+		bool    _loadanimation(tinygltf::animation& animation, tinygltf::model& model);
+		void    _loadrotationchannel(tinygltf::animationchannel& channel, tinygltf::animationsampler& sampler, tinygltf::model &model);
+		void    _loadtranslationchannel(tinygltf::animationchannel& channel, tinygltf::animationsampler& sampler, tinygltf::model &model);
+		std::vector<size_t>  _getpreviousandnextframe(std::vector<float> timestamps, float maxtime, size_t count);
+		void    _updatejointanimation(jointanimation *joint);
+		float   _calculateprogressionvalue(float nextframetime, float prevframetime, float maxtime);
+		Animation(tinygltf::Animation& animation, tinygltf::Model& model);
+		Animation(const Animation & rhs);
+		Animation&  operator=(const Animation & rhs);
+		~Animation();
+
+		std::string     getAnimationName() const;
+		JointAnimation  *getJointAnimation(int id);
+		glm::mat4       getJointAnimationMatrix(int id);
+		glm::mat4       getJointTranslationMatrix(int id);
+		glm::mat4       getJointRotationMatrix(int id);
+		void            increaseCurrentTimeStamp(float val);
+		void            update();
+		void            setCurrentAnimationTime(float val);
+
+		template <typename T>
+			static  void    loadOneManyToVector(std::vector<T>& list, T val, int count)
+			{
+				for (int i = 0; i < count; i++)
+					list.push_back(val);
+			}
+
+		void    render(glm::mat4 matrix);
+		void    simpleRender(glm::mat4 matrix);
+
+		void            setLocalMatrix(glm::mat4 mat) { _locMat = mat; }
+
+		void            loadMaterialToShader()
+		{
+			for (std::pair<int, Material> material : _materials)
+				Material::sendMaterialToShader(_shader, material.second, material.first);
+		}
+
+		void            unloadMaterialFromShader()
+		{
+			for (std::pair<int, Material> material : _materials)
+				material.second.texure.unbindTexture();
+		}
+
+		void            addMaterial(int index, Material material)
+		{
+			_materials.insert(std::make_pair(index, material));
+		}
+
+		void            addTextureToMaterial(int index, Texture texture)
+		{
+			try {
+				_materials.at(index).texure = texture;
+			}catch (const std::out_of_range& oor) {
+				std::cerr << "Invalid index in add texture in model : " << index << std::endl;
+			}
+
+		}
+
+		void            addBaseColorToMaterial(int index, glm::vec4 color)
+		{
+			try {
+				_materials.at(index).base_color = color;
+			}catch (const std::out_of_range& oor) {
+				std::cerr << "Invalid index in add base color in model : " << index << std::endl;
+			}
+
+		}
+
+		void            loadTextureToMaterial(int index, const char *path)
+		{
+			try {
+				_materials.at(index).texure.loadTextureFromPath(path);
+			}catch (const std::out_of_range& oor) {
+				std::cerr << "Invalid index in load texture in model : " << index << std::endl;
+			}
+
+		}
+};
